@@ -20,6 +20,8 @@ export interface AdSlot {
   position: number // minutes into the show
   duration: 10 | 20 | 30
   type: 'brand' | 'product' | 'sponsor'
+  label?: string // Human-readable label like "Beginning", "Middle", "End"
+  available?: boolean // Whether this slot is available
 }
 
 export interface ShowAdSchedule {
@@ -279,12 +281,47 @@ class AdvertisingService {
   public getAvailableSlots(showName: string, showDuration: number): AdSlot[] {
     const schedule = this.getAdScheduleForShow(showDuration)
     const bookedAds = this.getAdvertisementsForShow(showName)
+    const now = Date.now()
+    const showElapsedMinutes = (now - this.showStartTime) / 60000
     
-    // Return slots that don't have too many ads booked
-    return schedule.adSlots.filter(slot => {
+    // Add labels to slots and check availability
+    return schedule.adSlots.map(slot => {
+      // Determine label based on position
+      let label = ''
+      if (slot.position <= 5) {
+        label = 'Beginning of show'
+      } else if (slot.position >= showDuration - 5) {
+        label = 'End of show'
+      } else if (slot.position === showDuration) {
+        label = 'After show ends'
+      } else {
+        label = 'Middle of show'
+      }
+      
+      // Check if slot is already past (for current show)
+      const isPast = this.currentShow === showName && showElapsedMinutes > slot.position
+      
+      // Check if slot is fully booked
       const adsForSlot = bookedAds.filter(ad => ad.duration === slot.duration)
-      return adsForSlot.length < 5 // Max 5 ads per slot
-    })
+      const isFullyBooked = adsForSlot.length >= 3 // Max 3 ads per slot
+      
+      return {
+        ...slot,
+        label,
+        available: !isPast && !isFullyBooked
+      }
+    }).filter(slot => slot.available) // Only return available slots
+  }
+
+  // Get pricing based on duration and package type
+  public static getPricing(duration: 10 | 20 | 30, packageType: 'standard' | 'branded'): number {
+    const pricing = {
+      10: { standard: 0.05, branded: 50 },
+      20: { standard: 30, branded: 60 },
+      30: { standard: 50, branded: 100 }
+    }
+    
+    return pricing[duration][packageType]
   }
 
   // Analytics
@@ -323,3 +360,6 @@ class AdvertisingService {
 
 // Export singleton instance
 export const advertisingService = new AdvertisingService()
+
+// Export the class for static method access
+export { AdvertisingService }
