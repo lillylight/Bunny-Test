@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { OnchainCheckout } from "@/components/onchain-checkout"
 import { AdvertisingModal } from "@/components/advertising-modal"
+import { musicGenerationService } from "@/lib/music-generation-service"
 
 interface RequestsPanelProps {
   currentShow: {
@@ -48,14 +49,14 @@ export function RequestsPanel({ currentShow, onRequestSuccess }: RequestsPanelPr
     {
       id: "dedication",
       name: "Song Dedication",
-      description: "Dedicate a song to someone special",
+      description: "Dedicate an AI-generated song to someone special",
       icon: <Music size={20} />,
       color: "from-blue-500 to-cyan-500",
     },
     {
       id: "request",
       name: "Song Request",
-      description: "Request a song to be generated and played",
+      description: "Request a custom AI-generated song",
       icon: <Music size={20} />,
       color: "from-green-500 to-emerald-500",
     },
@@ -155,32 +156,57 @@ export function RequestsPanel({ currentShow, onRequestSuccess }: RequestsPanelPr
     
     setIsSubmitting(true)
     try {
-      if (onRequestSuccess) {
-        if (requestType === "callIn") {
-          onRequestSuccess(requestType, "", userName, userLocation)
-        } else {
-          onRequestSuccess(requestType, message, userName)
-        }
-      }
-      
-      // Show queue position for non-call-in requests
-      if (requestType !== "callIn") {
-        setQueuePosition(Math.floor(Math.random() * 5) + 1)
+      // Handle music generation requests
+      if (requestType === "request" || requestType === "dedication") {
+        const musicRequest = await musicGenerationService.addMusicRequest(
+          requestType as 'request' | 'dedication',
+          userName,
+          message,
+          currentShow.name,
+          requestType === "dedication" ? userLocation : undefined
+        )
+        
+        toast({
+          title: "Music Request Submitted",
+          description: requestType === "dedication" 
+            ? `Your dedication to ${userLocation} will be generated and played soon!` 
+            : "Your custom song will be generated and played soon!",
+          duration: 5000,
+        })
+        
+        // Show queue position
+        const pendingRequests = musicGenerationService.getPendingRequests(currentShow.name)
+        setQueuePosition(pendingRequests.length)
         setTimeout(() => setQueuePosition(null), 5000)
+      } else {
+        // Handle other request types
+        if (onRequestSuccess) {
+          if (requestType === "callIn") {
+            onRequestSuccess(requestType, "", userName, userLocation)
+          } else {
+            onRequestSuccess(requestType, message, userName)
+          }
+        }
+        
+        // Show queue position for non-call-in requests
+        if (requestType !== "callIn") {
+          setQueuePosition(Math.floor(Math.random() * 5) + 1)
+          setTimeout(() => setQueuePosition(null), 5000)
+        }
+        
+        toast({
+          title: "Request Submitted",
+          description: requestType === "shoutout" 
+            ? "Your shoutout will be read on air soon!" 
+            : "Your request has been submitted successfully!",
+          duration: 5000,
+        })
       }
       
       // Reset form
       setMessage("")
       setUserLocation("")
       setSelectedRequest(null)
-      
-      toast({
-        title: "Request Submitted",
-        description: requestType === "shoutout" 
-          ? "Your shoutout will be read on air soon!" 
-          : "Your request has been submitted successfully!",
-        duration: 5000,
-      })
     } catch (error) {
       console.error("Error:", error)
       toast({
@@ -433,6 +459,31 @@ export function RequestsPanel({ currentShow, onRequestSuccess }: RequestsPanelPr
                   onChange={(e) => setUserLocation(e.target.value)}
                   required
                   className="w-full bg-white"
+                />
+              ) : selectedRequest === "dedication" ? (
+                <>
+                  <Input
+                    placeholder="Who is this dedication for?"
+                    value={userLocation}
+                    onChange={(e) => setUserLocation(e.target.value)}
+                    required
+                    className="w-full bg-white"
+                  />
+                  <Textarea
+                    placeholder="Your dedication message and song style (e.g., 'For my wife Sarah on our anniversary. Please play something romantic with piano and strings')"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    className="min-h-[120px] w-full resize-none bg-white"
+                    required
+                  />
+                </>
+              ) : selectedRequest === "request" ? (
+                <Textarea
+                  placeholder="Describe the song you'd like to hear (e.g., 'upbeat jazz with saxophone and piano' or 'chill lo-fi hip hop for studying')"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  className="min-h-[120px] w-full resize-none bg-white"
+                  required
                 />
               ) : (
                 <Textarea
